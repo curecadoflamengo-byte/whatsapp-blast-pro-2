@@ -4,7 +4,8 @@ const http = require("http");
 const { Server } = require("socket.io");
 const path = require("path");
 const crypto = require("crypto");
-const pino = require("pino"); // ← ADICIONADO (só essa linha)
+const pino = require("pino");
+const { exec } = require("child_process");
 
 // IMPORTAÇÕES CORRIGIDAS E COMPLETAS
 const {
@@ -30,23 +31,61 @@ let conectado = false;
 let gruposCache = [];
 
 // ===============================================================
+//  AUTOLIMPEZA AUTOMÁTICA (a cada 4h + após blast grande)
+// ===============================================================
+function autoLimpeza() {
+  console.log("[AUTOLIMPEZA Iniciando limpeza automática de memória e cache...");
+
+  // Força coleta de lixo do Node.js
+  if (global.gc) global.gc();
+
+  const comandos = [
+    `powershell -Command "Remove-Item -Path '$env:TEMP\\*' -Recurse -Force -ErrorAction SilentlyContinue"`,
+    `powershell -Command "Remove-Item -Path 'C:\\Windows\\Temp\\*' -Recurse -Force -ErrorAction SilentlyContinue"`,
+    `powershell -Command "Remove-Item -Path '$env:USERPROFILE\\AppData\\Local\\npm-cache\\*' -Recurse -Force -ErrorAction SilentlyContinue"`,
+    `powershell -Command "Remove-Item -Path '.\\node_modules\\.cache\\' -Recurse -Force -ErrorAction SilentlyContinue" 2>$null`,
+    `npm cache clean --force`
+  ];
+
+  comandos.forEach(cmd => {
+    exec(cmd, { windowsHide: true }, (err) => {
+      if (err && !err.message.includes("não encontrado") && !err.message.includes("The system cannot find")) {
+        // ignora erros comuns
+      }
+    });
+  });
+
+  if (global.io) {
+    global.io.emit("log", "LIMPEZA Cache e memória limpos automaticamente");
+  }
+  console.log("[AUTOLIMPEZA] Limpeza concluída!\n");
+}
+
+// Roda limpeza a cada 4 horas
+setInterval(autoLimpeza, 4 * 60 * 60 * 1000);
+
+// Primeira limpeza 10 segundos após conectar
+setTimeout(autoLimpeza, 10000);
+
+// Exporta função para o agendador usar após blast grande
+global.autoLimpeza = autoLimpeza;
+
+// ===============================================================
 //  CONEXÃO DO BAILEYS
 // ===============================================================
 async function conectar() {
   const { state, saveCreds } = await useMultiFileAuthState("auth_info");
 
-sock = makeWASocket({
-  auth: state,
-  printQRInTerminal: false,
-  syncFullHistory: false,
-  logger: pino({ level: 'silent' }),           // já silencia quase tudo
-  markOnlineOnConnect: false,
-  // IGNORA TOTALMENTE ERROS DE DECRIPTAÇÃO (Bad MAC, etc)
-  shouldIgnoreJid: jid => true,
-  getMessage: async () => ({ conversation: '' })
-});
+  sock = makeWASocket({
+    auth: state,
+    printQRInTerminal: false,
+    syncFullHistory: false,
+    logger: pino({ level: 'silent' }),
+    markOnlineOnConnect: false,
+    shouldIgnoreJid: jid => true,
+    getMessage: async () => ({ conversation: '' })
+  });
   
-
   sock.ev.on("creds.update", saveCreds);
 
   sock.ev.on("connection.update", async (update) => {
@@ -138,6 +177,11 @@ io.on("connection", (socket) => {
     const erro = results.filter(r => r.status === "erro").length;
 
     socket.emit("finalizado", { ok, erro });
+
+    // Limpeza automática após envio instantâneo grande
+    if (gruposSelecionados.length > 300) {
+      setTimeout(autoLimpeza, 10000);
+    }
   });
 
   // LISTAR AGENDAMENTOS
@@ -146,26 +190,25 @@ io.on("connection", (socket) => {
     socket.emit("agendamentos-list", ags);
   });
 
-socket.on("editar-agendamento", (dados) => {
-  const { id, gruposIds, texto, imagemBase64, horarios, repetirDiariamente } = dados;
+  socket.on("editar-agendamento", (dados) => {
+    const { id, gruposIds, texto, imagemBase64, horarios, repetirDiariamente } = dados;
 
-  const alteracoes = {};
-  if (gruposIds !== undefined) alteracoes.gruposIds = gruposIds;
-  if (texto !== undefined) alteracoes.texto = texto;
-  if (imagemBase64 !== undefined) alteracoes.imagemBase64 = imagemBase64;
-  if (horarios !== undefined) alteracoes.horarios = horarios;
-  if (repetirDiariamente !== undefined) alteracoes.repetirDiariamente = repetirDiariamente;
+    const alteracoes = {};
+    if (gruposIds !== undefined) alteracoes.gruposIds = gruposIds;
+    if (texto !== undefined) alteracoes.texto = texto;
+    if (imagemBase64 !== undefined) alteracoes.imagemBase64 = imagemBase64;
+    if (horarios !== undefined) alteracoes.horarios = horarios;
+    if (repetirDiariamente !== undefined) alteracoes.repetirDiariamente = repetirDiariamente;
 
-  const atualizado = editarAgendamento(id, alteracoes);
-  if (atualizado) {
-    registrarJobs(sock, atualizado);
-    io.emit("agendamento-editado", atualizado);
-  } else {
-    socket.emit("erro", "Agendamento não encontrado");
-  }
-});
+    const atualizado = editarAgendamento(id, alteracoes);
+    if (atualizado) {
+      registrarJobs(sock, atualizado);
+      io.emit("agendamento-editado", atualizado);
+    } else {
+      socket.emit("erro", "Agendamento não encontrado");
+    }
+  });
 
-  // EXCLUIR AGENDAMENTO (CORRIGIDO: atualiza em todas as abas em tempo real)
   socket.on("excluir-agendamento", (id) => {
     const sucesso = excluirAgendamento(id);
 
@@ -176,31 +219,30 @@ socket.on("editar-agendamento", (dados) => {
     }
   });
 
- socket.on("criar-agendamento", (data) => {
-  const { gruposIds, texto, imagemBase64, horarios, repetirDiariamente = false } = data;
+  socket.on("criar-agendamento", (data) => {
+    const { gruposIds, texto, imagemBase64, horarios, repetirDiariamente = false } = data;
 
-  if (!Array.isArray(gruposIds) || gruposIds.length === 0) {
-    return socket.emit("erro", "Selecione pelo menos um grupo");
-  }
-  if (!Array.isArray(horarios) || horarios.length === 0) {
-    return socket.emit("erro", "Adicione pelo menos um horário");
-  }
+    if (!Array.isArray(gruposIds) || gruposIds.length === 0) {
+      return socket.emit("erro", "Selecione pelo menos um grupo");
+    }
+    if (!Array.isArray(horarios) || horarios.length === 0) {
+      return socket.emit("erro", "Adicione pelo menos um horário");
+    }
 
-  const novoAgendamento = {
-    id: crypto.randomUUID(),
-    gruposIds,
-    texto,
-    imagemBase64: imagemBase64 || null,
-    horarios, // ← array de { data: ISO }
-    repetirDiariamente,
-    criadoEm: new Date().toISOString()
-  };
+    const novoAgendamento = {
+      id: crypto.randomUUID(),
+      gruposIds,
+      texto,
+      imagemBase64: imagemBase64 || null,
+      horarios,
+      repetirDiariamente,
+      criadoEm: new Date().toISOString()
+    };
 
-  criarAgendamento(novoAgendamento);
-  registrarJobs(sock, novoAgendamento);
-  io.emit("agendamento-ok", novoAgendamento);
-});
-
+    criarAgendamento(novoAgendamento);
+    registrarJobs(sock, novoAgendamento);
+    io.emit("agendamento-ok", novoAgendamento);
+  });
 });
 
 // ===============================================================
