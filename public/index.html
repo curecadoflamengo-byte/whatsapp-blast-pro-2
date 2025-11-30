@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>WhatsApp Blast Pro — Agendador</title>
+
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+
+  <style>
+    :root{
+      --wa-green:#00a884;
+      --bg:#0b141a;
+      --card:#1f2c34;
+      --muted:#8696a0;
+      --accent:#25d366;
+      color-scheme: dark;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;padding:0;
+      font-family: "Segoe UI", Roboto, Arial;
+      background:var(--bg);
+      color:#e9edef;
+      min-height:100vh;
+      display:flex;flex-direction:column;
+    }
+
+    .header{
+      background:var(--wa-green);
+      padding:14px 18px;
+      font-weight:700;
+      display:flex;align-items:center;gap:12px;
+      font-size:18px;
+    }
+
+    .container{padding:18px;flex:1;display:grid;grid-template-columns: 1fr 360px;gap:18px;align-items:start;}
+
+    .card{
+      background:var(--card);
+      border-radius:12px;padding:14px;
+      box-shadow:0 6px 18px rgba(0,0,0,0.35);
+    }
+
+    .qr{display:flex;flex-direction:column;align-items:center;gap:10px;padding:18px}
+    .qr img{width:260px;height:260px;border-radius:12px;border:8px solid #fff;object-fit:cover}
+
+    .status{font-size:15px;text-align:center;margin-bottom:6px;color:#53fa9d}
+
+    .grupos-list{max-height:300px;overflow:auto;margin-top:10px}
+    .grupo-item{display:flex;gap:12px;align-items:center;padding:10px;border-radius:10px;background:#2a3942;margin-bottom:8px;cursor:pointer}
+    .grupo-item input{transform:scale(1.2);margin-left:6px}
+
+    textarea{width:100%;height:110px;border-radius:10px;padding:12px;background:#232f36;border:none;color:#e9edef;resize:vertical}
+    .btn{background:var(--wa-green);border:none;padding:12px 14px;border-radius:999px;color:white;font-weight:700;cursor:pointer}
+    .btn.secondary{background:#33414a}
+    .btn.small{padding:8px 10px;border-radius:8px;font-size:14px}
+    .file-label{display:inline-block;padding:10px;border-radius:10px;background:#33414a;cursor:pointer}
+
+    .right-col{display:flex;flex-direction:column;gap:18px}
+
+    .preview-img{max-width:100%;border-radius:10px;margin-top:10px}
+
+    .contador{text-align:center;font-weight:700;color:#53fa9d;margin:12px 0}
+
+    .agend-list{max-height:300px;overflow:auto;margin-top:10px}
+    .agend-item{padding:10px;border-radius:8px;background:#26353b;margin-bottom:8px}
+
+    label.small{font-size:13px;color:var(--muted);display:block;margin-bottom:6px}
+    input[type="datetime-local"], select, input[type="text"]{
+      width:100%;padding:8px;border-radius:8px;background:#1b262b;border:none;color:#e9edef;
+    }
+
+    footer{padding:12px;text-align:center;color:var(--muted);font-size:13px;background:#071014}
+    .muted{color:var(--muted)}
+  </style>
+</head>
+<body>
+  <div class="header">
+    WhatsApp Blast - Agendador
+  </div>
+
+  <div class="container">
+    <!-- LEFT -->
+    <div>
+      <div class="card">
+        <div id="status" class="status">Aguardando conexão... escaneie o QR</div>
+        <div id="qr" class="qr">
+          <div class="muted">QR aparecerá aqui</div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:14px">
+        <h3 style="margin:0 0 8px 0">Enviar agora</h3>
+
+        <div style="display:flex;gap:10px">
+          <label class="file-label">
+            Escolher imagem
+            <input type="file" id="imagem" accept="image/*" style="display:none">
+          </label>
+          <button class="btn small" id="limparImagem">Limpar imagem</button>
+        </div>
+        <div id="nome-imagem" style="margin-top:8px;color:var(--muted)">Nenhuma imagem selecionada</div>
+        <img id="preview" class="preview-img" style="display:none" alt="preview">
+
+        <div style="margin-top:12px">
+          <label class="small">Mensagem</label>
+          <textarea id="texto" placeholder="Digite sua mensagem..."></textarea>
+        </div>
+
+        <div style="margin-top:10px;display:flex;gap:10px">
+          <button class="btn" id="enviarBtn">Enviar para selecionados</button>
+        </div>
+
+        <div id="resultado" style="margin-top:12px"></div>
+      </div>
+
+      <div class="card" style="margin-top:14px">
+          <div style="display:flex;gap:10px;align-items:center;justify-content:space-between;margin-top:12px">
+          <div class="contador" id="contador">0 grupos selecionados</div>
+          <button class="btn secondary small" id="toggleTodosBtn">Selecionar todos</button>
+        </div>
+        <h3 style="margin:0 0 8px 0">Seus grupos</h3>
+        <div id="lista-grupos" class="grupos-list">
+          <div class="muted">Nenhum grupo carregado ainda</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT -->
+    <div class="right-col">
+      <div class="card">
+        <h3 style="margin:0 0 8px 0">Criar agendamento</h3>
+
+        <!-- GRUPOS MÚLTIPLOS -->
+        <div style="margin-bottom:12px">
+          <label class="small">Grupos (múltiplos)</label>
+          <div style="display:flex;gap:8px;margin-bottom:6px;align-items:center">
+            <input type="text" id="buscaGrupoAg" placeholder="Buscar grupo..." style="flex:1;padding:8px;border-radius:8px;background:#1b262b;border:none;color:#e9edef">
+            <button class="btn secondary small" id="toggleTodosAgBtn">Todos</button>
+          </div>
+          <div id="listaGruposAg" class="grupos-list" style="max-height:180px;overflow:auto;border:1px solid #33414a;border-radius:8px;padding:4px"></div>
+          <div style="margin-top:6px;font-size:13px;color:#53fa9d">
+            Selecionados: <span id="contadorGruposAg">0</span>
+          </div>
+        </div>
+
+        <div style="margin-top:8px">
+          <label class="small">Mensagem</label>
+          <textarea id="textoAgendamento" placeholder="Mensagem do agendamento" rows="3" style="width:100%;border-radius:8px;padding:10px;background:#232f36;border:none;color:#e9edef;resize:vertical"></textarea>
+        </div>
+
+        <div style="margin-top:8px;display:flex;gap:10px;align-items:center">
+          <label class="file-label">
+            Imagem (opcional)
+            <input type="file" id="imagemAg" accept="image/*" style="display:none">
+          </label>
+          <div id="nomeImagemAg" style="color:var(--muted)">Nenhuma imagem</div>
+          <button class="btn secondary small" id="limparImagemAg">Limpar</button>
+        </div>
+
+        <!-- MÚLTIPLOS HORÁRIOS -->
+        <div style="margin-top:10px">
+          <label class="small">Horários de envio</label>
+          <div id="listaHorarios" style="margin-bottom:8px">
+            <div class="horario-item" style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+              <input type="datetime-local" class="horario-input" required>
+              <button type="button" class="btn secondary small remover-horario" style="display:none">Remover</button>
+            </div>
+          </div>
+          <button type="button" class="btn secondary small" id="addHorario">+ Adicionar horário</button>
+        </div>
+
+        <!-- CHECKBOX DE REPETIÇÃO DIÁRIA -->
+        <div style="margin-top:12px">
+          <label class="small" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" id="repetirDiariamente">
+            <span>Repetir todos os dias nesses horários</span>
+          </label>
+        </div>
+
+        <div style="margin-top:12px">
+          <button class="btn" id="criarAgendamentoBtn">
+            Criar agendamento para <span id="btnContadorAg">0</span> grupo(s)
+          </button>
+        </div>
+
+        <div id="agendamentosContainer" class="agend-list" style="margin-top:12px">
+          <div class="muted">Nenhum agendamento criado</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 style="margin:0 0 8px 0">Logs / Status</h3>
+        <div id="logs" style="font-size:13px;line-height:1.4;color:var(--muted);max-height:260px;overflow:auto;padding-right:6px"></div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    Rodando local — mantenha o bot conectado. Agendamentos são persistidos no servidor e recarregados no boot.
+  </footer>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+  const socket = io();
+
+  // UI elements
+  const qrEl = document.getElementById('qr');
+  const statusEl = document.getElementById('status');
+  const listaGruposEl = document.getElementById('lista-grupos');
+  const contadorEl = document.getElementById('contador');
+  const toggleTodosBtn = document.getElementById('toggleTodosBtn');
+
+  const imagemInput = document.getElementById('imagem');
+  const nomeImagem = document.getElementById('nome-imagem');
+  const preview = document.getElementById('preview');
+
+  const enviarBtn = document.getElementById('enviarBtn');
+  const textoEl = document.getElementById('texto');
+  const resultadoEl = document.getElementById('resultado');
+
+  const textoAg = document.getElementById('textoAgendamento');
+  const imagemAgInput = document.getElementById('imagemAg');
+  const nomeImagemAg = document.getElementById('nomeImagemAg');
+  const listaHorarios = document.getElementById('listaHorarios');
+  const addHorarioBtn = document.getElementById('addHorario');
+  const repetirDiariamenteCheckbox = document.getElementById('repetirDiariamente');
+  const criarAgendamentoBtn = document.getElementById('criarAgendamentoBtn');
+  const agendamentosContainer = document.getElementById('agendamentosContainer');
+
+  const logsEl = document.getElementById('logs');
+
+  let grupos = [];
+  let checkboxes = [];
+  let todosSelecionados = true;
+  let agendamentos = [];
+  let gruposSelecionadosAg = [];
+
+  // helpers
+  function log(msg) {
+    const t = new Date().toLocaleString();
+    logsEl.innerHTML = `<div>[${t}] ${escapeHtml(msg)}</div>` + logsEl.innerHTML;
+  }
+
+  function escapeHtml(t) {
+    return (t + '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  // QR e status
+  socket.on('qr', (qr) => {
+    qrEl.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=320x320&data=${encodeURIComponent(qr)}">`;
+    statusEl.innerText = 'Escaneie o QR Code com o WhatsApp';
+    log('QR recebido');
+  });
+
+  socket.on('status', (msg) => {
+    statusEl.innerText = msg;
+    log('Status: ' + msg);
+  });
+
+  socket.on('erro', (msg) => {
+    resultadoEl.innerHTML = `<div style="color:#ff6b6b">${escapeHtml(msg)}</div>`;
+    log('ERRO: ' + msg);
+  });
+
+  // grupos
+  socket.on('grupos', (lista) => {
+    grupos = lista;
+    renderGrupos();
+    renderListaGruposAg();
+    atualizarContador();
+    log(`${lista.length} grupos carregados`);
+  });
+
+  // agendamentos
+  socket.on('agendamentos-list', (lista) => {
+    agendamentos = lista.slice().sort((a,b) => new Date(b.criadoEm || 0) - new Date(a.criadoEm || 0));
+    renderAgendamentos();
+    log(`Carregados ${agendamentos.length} agendamento(s)`);
+  });
+
+  socket.on('agendamento-ok', (...novos) => {
+    novos.forEach(ag => agendamentos.unshift(ag));
+    renderAgendamentos();
+    log(`Agendamento(s) criado(s): ${novos.length}`);
+  });
+
+  socket.on('finalizado', (res) => {
+    resultadoEl.innerHTML = `<div style="background:${res.erro ? '#ffb4b4' : '#25d366'};padding:12px;border-radius:8px;color:#071014">
+      ${res.ok} enviadas com sucesso<br>${res.erro} falharam
+    </div>`;
+    enviarBtn.disabled = false;
+    enviarBtn.style.opacity = 1;
+  });
+
+  // render grupos envio imediato
+  function renderGrupos() {
+    listaGruposEl.innerHTML = '';
+    checkboxes = [];
+    if (!grupos.length) {
+      listaGruposEl.innerHTML = `<div class="muted">Nenhum grupo</div>`;
+      return;
+    }
+    grupos.forEach(g => {
+      const div = document.createElement('div');
+      div.className = 'grupo-item';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.value = g.id;
+      cb.checked = true;
+      cb.onchange = atualizarContador;
+      checkboxes.push(cb);
+      const info = document.createElement('div');
+      info.innerHTML = `<div style="font-weight:700">${escapeHtml(g.name)}</div><small class="muted">${g.participantes} membros</small>`;
+      div.appendChild(cb);
+      div.appendChild(info);
+      listaGruposEl.appendChild(div);
+    });
+  }
+
+  function atualizarContador() {
+    const count = checkboxes.filter(c => c.checked).length;
+    contadorEl.innerText = `${count} grupo${count !== 1 ? 's' : ''} selecionado${count !== 1 ? 's' : ''}`;
+  }
+
+  toggleTodosBtn.onclick = () => {
+    todosSelecionados = !todosSelecionados;
+    checkboxes.forEach(cb => cb.checked = todosSelecionados);
+    toggleTodosBtn.innerText = todosSelecionados ? 'Desmarcar todos' : 'Selecionar todos';
+    atualizarContador();
+  };
+
+  // envio imediato
+  enviarBtn.onclick = async () => {
+    const selecionados = checkboxes.filter(c => c.checked).map(c => c.value);
+    if (selecionados.length === 0) return alert('Selecione ao menos um grupo!');
+
+    const file = imagemInput.files[0];
+    let imagemBase64 = null;
+    if (file) imagemBase64 = await readFileAsDataURL(file);
+
+    enviarBtn.disabled = true;
+    enviarBtn.style.opacity = 0.6;
+
+    socket.emit('enviar', {
+      gruposSelecionados: selecionados,
+      imagemBase64,
+      texto: textoEl.value.trim()
+    });
+  };
+
+  function readFileAsDataURL(file) {
+    return new Promise((res) => {
+      const r = new FileReader();
+      r.onload = e => res(e.target.result);
+      r.readAsDataURL(file);
+    });
+  }
+
+  // imagem envio imediato
+  imagemInput.onchange = function(e) {
+    const f = e.target.files[0];
+    if (!f) { nomeImagem.innerText = 'Nenhuma imagem selecionada'; preview.style.display = 'none'; return; }
+    nomeImagem.innerText = f.name;
+    const reader = new FileReader();
+    reader.onload = ev => { preview.src = ev.target.result; preview.style.display = 'block'; };
+    reader.readAsDataURL(f);
+  };
+
+  document.getElementById('limparImagem').onclick = () => {
+    imagemInput.value = ''; nomeImagem.innerText = 'Nenhuma imagem selecionada'; preview.style.display = 'none';
+  };
+
+  // =============================================
+  // AGENDAMENTO COM MÚLTIPLOS GRUPOS + MÚLTIPLOS HORÁRIOS
+  // =============================================
+  function renderListaGruposAg() {
+    const busca = document.getElementById('buscaGrupoAg').value.toLowerCase();
+    const container = document.getElementById('listaGruposAg');
+    container.innerHTML = '';
+    const filtrados = grupos.filter(g => g.name.toLowerCase().includes(busca));
+    filtrados.forEach(g => {
+      const checked = gruposSelecionadosAg.includes(g.id);
+      const div = document.createElement('div');
+      div.className = 'grupo-item';
+      div.style.padding = '8px';
+      div.style.margin = '4px 0';
+      div.innerHTML = `
+        <label style="cursor:pointer;display:flex;align-items:center;gap:10px;width:100%">
+          <input type="checkbox" ${checked?'checked':''} value="${g.id}" style="transform:scale(1.2)">
+          <span style="flex:1">${escapeHtml(g.name)} <small class="muted">(${g.participantes})</small></span>
+        </label>
+      `;
+      div.querySelector('input').onchange = (e) => {
+        if (e.target.checked) {
+          if (!gruposSelecionadosAg.includes(g.id)) gruposSelecionadosAg.push(g.id);
+        } else {
+          gruposSelecionadosAg = gruposSelecionadosAg.filter(id => id !== g.id);
+        }
+        atualizarContadorAg();
+      };
+      container.appendChild(div);
+    });
+  }
+
+  function atualizarContadorAg() {
+    const count = gruposSelecionadosAg.length;
+    document.getElementById('contadorGruposAg').textContent = count;
+    document.getElementById('btnContadorAg').textContent = count;
+  }
+
+  document.getElementById('toggleTodosAgBtn').onclick = () => {
+    if (gruposSelecionadosAg.length === grupos.length) {
+      gruposSelecionadosAg = [];
+    } else {
+      gruposSelecionadosAg = grupos.map(g => g.id);
+    }
+    renderListaGruposAg();
+    atualizarContadorAg();
+  };
+
+  document.getElementById('buscaGrupoAg').oninput = renderListaGruposAg;
+
+  imagemAgInput.onchange = (e) => {
+    const f = e.target.files[0];
+    nomeImagemAg.textContent = f ? f.name : 'Nenhuma imagem';
+  };
+
+  document.getElementById('limparImagemAg').onclick = () => {
+    imagemAgInput.value = '';
+    nomeImagemAg.textContent = 'Nenhuma imagem';
+  };
+
+  // === MÚLTIPLOS HORÁRIOS ===
+  function atualizarBotaoRemover() {
+    const itens = listaHorarios.querySelectorAll('.horario-item');
+    itens.forEach((item, i) => {
+      const btn = item.querySelector('.remover-horario');
+      btn.style.display = itens.length > 1 ? 'block' : 'none';
+    });
+  }
+
+  addHorarioBtn.onclick = () => {
+    const div = document.createElement('div');
+    div.className = 'horario-item';
+    div.style.cssText = 'display:flex;gap:8px;align-items:center;margin-bottom:8px';
+    div.innerHTML = `
+      <input type="datetime-local" class="horario-input" required>
+      <button type="button" class="btn secondary small remover-horario">Remover</button>
+    `;
+    div.querySelector('.remover-horario').onclick = () => {
+      div.remove();
+      atualizarBotaoRemover();
+    };
+    listaHorarios.appendChild(div);
+    atualizarBotaoRemover();
+  };
+
+  // Inicia com 1 horário
+  addHorarioBtn.click();
+
+  function coletarHorarios() {
+    return Array.from(listaHorarios.querySelectorAll('.horario-input'))
+      .map(input => input.value)
+      .filter(v => v)
+      .map(v => ({ data: new Date(v).toISOString() }));
+  }
+
+  // CRIAÇÃO DE AGENDAMENTO
+  criarAgendamentoBtn.onclick = async () => {
+    if (gruposSelecionadosAg.length === 0) return alert('Selecione pelo menos um grupo!');
+    if (!textoAg.value.trim()) return alert('Digite a mensagem');
+
+    const horarios = coletarHorarios();
+    if (horarios.length === 0) return alert('Adicione pelo menos um horário válido!');
+
+    let imagemBase64 = null;
+    if (imagemAgInput.files[0]) {
+      imagemBase64 = await readFileAsDataURL(imagemAgInput.files[0]);
+    }
+
+    socket.emit('criar-agendamento', {
+      gruposIds: gruposSelecionadosAg,
+      texto: textoAg.value.trim(),
+      imagemBase64,
+      horarios,
+      repetirDiariamente: repetirDiariamenteCheckbox.checked
+    });
+
+    log(`Agendamento criado para ${gruposSelecionadosAg.length} grupos em ${horarios.length} horário(s)`);
+    alert(`Agendamento criado com sucesso!`);
+
+    // limpar formulário
+    textoAg.value = '';
+    imagemAgInput.value = '';
+    nomeImagemAg.textContent = 'Nenhuma imagem';
+    listaHorarios.innerHTML = '<div class="horario-item" style="display:flex;gap:8px;align-items:center;margin-bottom:8px"><input type="datetime-local" class="horario-input" required><button type="button" class="btn secondary small remover-horario" style="display:none">Remover</button></div>';
+    atualizarBotaoRemover();
+    repetirDiariamenteCheckbox.checked = false;
+    gruposSelecionadosAg = [];
+    renderListaGruposAg();
+    atualizarContadorAg();
+  };
+
+  // render agendamentos
+  function renderAgendamentos() {
+    agendamentosContainer.innerHTML = '';
+    if (!agendamentos.length) {
+      agendamentosContainer.innerHTML = `<div class="muted">Nenhum agendamento criado</div>`;
+      return;
+    }
+
+    agendamentos.forEach(a => {
+      const horariosText = a.horarios
+        ? a.horarios.map(h => new Date(h.data).toLocaleString()).join('<br>')
+        : 'Horário inválido';
+
+      const gruposNomes = a.gruposIds.map(id => {
+        const g = grupos.find(x => x.id === id);
+        return g ? g.name : id;
+      }).join(', ');
+
+      const repeticaoText = a.repetirDiariamente ? '<span style="color:#53fa9d;font-weight:700"> (Repete todos os dias)</span>' : '';
+
+      const div = document.createElement('div');
+      div.className = 'agend-item';
+      div.innerHTML = `
+        <div style="font-weight:700">${escapeHtml(a.texto || '(sem texto)')}${repeticaoText}</div>
+        <div style="font-size:12px;color:var(--muted);margin:4px 0">
+          ${horariosText}<br>
+        </div>
+        <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn small" onclick="abrirEditar('${a.id}')">Editar</button>
+          <button class="btn secondary small" onclick="excluirAgendamento('${a.id}')">Excluir</button>
+        </div>
+      `;
+      agendamentosContainer.appendChild(div);
+    });
+  }
+
+  // EDIÇÃO DE AGENDAMENTO
+  function abrirEditar(id) {
+    const ag = agendamentos.find(a => a.id === id);
+    if (!ag) return alert("Agendamento não encontrado");
+
+    gruposSelecionadosAg = [...ag.gruposIds];
+    renderListaGruposAg();
+    atualizarContadorAg();
+
+    textoAg.value = ag.texto || '';
+    nomeImagemAg.textContent = ag.imagemBase64 ? 'Imagem anexada' : 'Nenhuma imagem';
+    repetirDiariamenteCheckbox.checked = !!ag.repetirDiariamente;
+
+    // Limpa e recarrega horários
+    listaHorarios.innerHTML = '';
+    (ag.horarios || []).forEach(h => {
+      addHorarioBtn.click();
+      const inputs = listaHorarios.querySelectorAll('.horario-input');
+      inputs[inputs.length - 1].value = new Date(h.data).toISOString().slice(0,16);
+    });
+    atualizarBotaoRemover();
+
+    criarAgendamentoBtn.textContent = 'Salvar alterações';
+    criarAgendamentoBtn.onclick = async () => {
+      if (gruposSelecionadosAg.length === 0) return alert('Selecione pelo menos um grupo!');
+
+      const horarios = coletarHorarios();
+      if (horarios.length === 0) return alert('Adicione pelo menos um horário válido!');
+
+      let imagemBase64 = ag.imagemBase64;
+      if (imagemAgInput.files[0]) {
+        imagemBase64 = await readFileAsDataURL(imagemAgInput.files[0]);
+      }
+
+      socket.emit('editar-agendamento', {
+        id: ag.id,
+        gruposIds: gruposSelecionadosAg,
+        texto: textoAg.value.trim(),
+        imagemBase64,
+        horarios,
+        repetirDiariamente: repetirDiariamenteCheckbox.checked
+      });
+
+      alert('Agendamento atualizado com sucesso!');
+      criarAgendamentoBtn.textContent = `Criar agendamento para ${gruposSelecionadosAg.length} grupo(s)`;
+      criarAgendamentoBtn.onclick = null;
+
+      // limpa formulário
+      textoAg.value = ''; imagemAgInput.value = ''; nomeImagemAg.textContent = 'Nenhuma imagem';
+      listaHorarios.innerHTML = '<div class="horario-item" style="display:flex;gap:8px;align-items:center;margin-bottom:8px"><input type="datetime-local" class="horario-input" required><button type="button" class="btn secondary small remover-horario" style="display:none">Remover</button></div>';
+      atualizarBotaoRemover();
+      repetirDiariamenteCheckbox.checked = false;
+      gruposSelecionadosAg = []; renderListaGruposAg(); atualizarContadorAg();
+    };
+  }
+
+  function excluirAgendamento(id) {
+    if (!confirm('Tem certeza que quer excluir este agendamento?')) return;
+    socket.emit('excluir-agendamento', id);
+  }
+
+  // ATUALIZAÇÃO EM TEMPO REAL
+  socket.on('agendamento-editado', (ag) => {
+    const idx = agendamentos.findIndex(a => a.id === ag.id);
+    if (idx !== -1) agendamentos[idx] = ag;
+    else agendamentos.unshift(ag);
+    renderAgendamentos();
+    log('Agendamento atualizado em tempo real');
+  });
+
+  socket.on('agendamento-excluido', (id) => {
+    agendamentos = agendamentos.filter(a => a.id !== id);
+    renderAgendamentos();
+    log('Agendamento excluído em tempo real');
+  });
+
+  // carregar agendamentos automaticamente
+  function carregarAgendamentosDoServidor() {
+    socket.emit('listar-agendamentos');
+  }
+
+  socket.on('connect', () => { log('Conectado'); carregarAgendamentosDoServidor(); });
+  socket.on('grupos', carregarAgendamentosDoServidor);
+  socket.on('status', (msg) => {
+    if (msg.includes('Conectado') || msg.includes('grupos carregados')) {
+      setTimeout(carregarAgendamentosDoServidor, 1000);
+    }
+  });
+  setTimeout(carregarAgendamentosDoServidor, 1500);
+
+  log('Interface carregada');
+</script>
+</body>
+</html>
