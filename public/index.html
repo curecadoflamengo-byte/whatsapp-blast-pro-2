@@ -73,6 +73,11 @@
 
     footer{padding:12px;text-align:center;color:var(--muted);font-size:13px;background:#071014}
     .muted{color:var(--muted)}
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
   </style>
 </head>
 <body>
@@ -86,7 +91,22 @@
       <div class="card">
         <div id="status" class="status">Aguardando conexão... escaneie o QR</div>
         <div id="qr" class="qr">
-          <div class="muted">QR aparecerá aqui</div>
+          <!-- Spinner de carregamento -->
+          <div id="qr-spinner" style="display:flex; flex-direction:column; align-items:center; gap:20px;">
+            <div style="width:60px; height:60px; border:6px solid #33414a; border-top:6px solid var(--wa-green); border-radius:50%; animation:spin 1s linear infinite;"></div>
+            <div class="muted">Conectando ao WhatsApp...</div>
+          </div>
+
+          <!-- QR Code real -->
+          <div id="qr-image" style="display:none; flex-direction:column; align-items:center;">
+            <img id="qr-img-tag" alt="QR Code">
+            <div class="muted" style="margin-top:12px;">Escaneie com o app do WhatsApp</div>
+          </div>
+
+          <!-- Botão Desconectar -->
+          <button id="desconectarBtn" class="btn secondary" style="display:none; margin-top:20px;">
+            Desconectar conta
+          </button>
         </div>
       </div>
 
@@ -190,6 +210,21 @@
         </div>
       </div>
 
+      <!-- NOVA SEÇÃO: AUTOMATIZAR ENTRADA EM GRUPOS -->
+      <div class="card">
+        <h3 style="margin:0 0 8px 0">Entrar grupos</h3>
+        <button class="btn secondary" id="abrirJoinSection">Abrir ferramenta de entrada</button>
+        <div id="joinSection" style="display:none; margin-top:12px">
+          <label class="small">Links de Convite (um por linha)</label>
+          <textarea id="linksTextarea" placeholder="Cole os links aqui, ex: https://chat.whatsapp.com/ABCDEF" rows="5"></textarea>
+          <div style="margin-top:10px;display:flex;gap:10px">
+            <button class="btn small" id="iniciarJoins">Iniciar</button>
+            <button class="btn secondary small" id="fecharJoinSection">Fechar</button>
+          </div>
+          <div style="margin-top:8px; font-size:13px; color:var(--muted)">Dica: Máximo 50 links por vez para evitar ban.</div>
+        </div>
+      </div>
+
       <div class="card">
         <h3 style="margin:0 0 8px 0">Logs / Status</h3>
         <div id="logs" style="font-size:13px;line-height:1.4;color:var(--muted);max-height:260px;overflow:auto;padding-right:6px"></div>
@@ -249,20 +284,56 @@
 
   // QR e status
   socket.on('qr', (qr) => {
-    qrEl.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=320x320&data=${encodeURIComponent(qr)}">`;
+    // Esconde spinner e mostra QR
+    document.getElementById('qr-spinner').style.display = 'none';
+    document.getElementById('qr-image').style.display = 'flex';
+    document.getElementById('qr-image').style.flexDirection = 'column';
+    document.getElementById('qr-image').style.alignItems = 'center';
+
+    document.getElementById('qr-img-tag').src = `https://api.qrserver.com/v1/create-qr-code/?size=320x320&data=${encodeURIComponent(qr)}`;
+
+    // Esconde botão desconectar
+    document.getElementById('desconectarBtn').style.display = 'none';
+
     statusEl.innerText = 'Escaneie o QR Code com o WhatsApp';
-    log('QR recebido');
+    log('Novo QR Code gerado');
   });
 
   socket.on('status', (msg) => {
     statusEl.innerText = msg;
     log('Status: ' + msg);
+
+    if (msg.includes('Conectado') || msg.includes('grupos carregados')) {
+      // Esconde QR e spinner
+      document.getElementById('qr-spinner').style.display = 'none';
+      document.getElementById('qr-image').style.display = 'none';
+      // Mostra botão desconectar
+      document.getElementById('desconectarBtn').style.display = 'block';
+    }
   });
 
   socket.on('erro', (msg) => {
     resultadoEl.innerHTML = `<div style="color:#ff6b6b">${escapeHtml(msg)}</div>`;
     log('ERRO: ' + msg);
   });
+
+  // Botão Desconectar
+  document.getElementById('desconectarBtn').onclick = () => {
+    if (!confirm('Tem certeza que quer desconectar a conta do WhatsApp? Isso vai gerar um novo QR Code.')) {
+      return;
+    }
+
+    // Volta ao spinner
+    document.getElementById('qr-spinner').style.display = 'flex';
+    document.getElementById('qr-spinner').style.flexDirection = 'column';
+    document.getElementById('qr-spinner').style.alignItems = 'center';
+    document.getElementById('qr-image').style.display = 'none';
+    document.getElementById('desconectarBtn').style.display = 'none';
+
+    statusEl.innerText = 'Desconectando...';
+    socket.emit('desconectar');
+    log('Solicitando desconexão da conta...');
+  };
 
   // grupos
   socket.on('grupos', (lista) => {
@@ -628,6 +699,48 @@
     }
   });
   setTimeout(carregarAgendamentosDoServidor, 1500);
+
+  // NOVA FUNCIONALIDADE: AUTOMATIZAR ENTRADA EM GRUPOS
+  const abrirJoinSectionBtn = document.getElementById('abrirJoinSection');
+  const joinSection = document.getElementById('joinSection');
+  const linksTextarea = document.getElementById('linksTextarea');
+  const iniciarJoinsBtn = document.getElementById('iniciarJoins');
+  const fecharJoinSectionBtn = document.getElementById('fecharJoinSection');
+
+  abrirJoinSectionBtn.onclick = () => {
+    joinSection.style.display = 'block';
+    abrirJoinSectionBtn.style.display = 'none';
+  };
+
+  fecharJoinSectionBtn.onclick = () => {
+    joinSection.style.display = 'none';
+    abrirJoinSectionBtn.style.display = 'block';
+    linksTextarea.value = '';
+  };
+
+  iniciarJoinsBtn.onclick = () => {
+    const links = linksTextarea.value.trim().split('\n').filter(l => l.trim());
+    if (links.length === 0) return alert('Adicione pelo menos um link válido!');
+    if (links.length > 3000) return alert('Máximo 200 links por vez para evitar ban.');
+
+    iniciarJoinsBtn.disabled = true;
+    iniciarJoinsBtn.innerHTML = 'Entrando nos grupos... ⏳';
+    iniciarJoinsBtn.style.opacity = '0.6';
+
+    socket.emit('join-groups', links);
+    log(`Iniciando joins para ${links.length} grupos...`);
+  };
+
+  socket.on('log', (msg) => {
+    log(msg);
+    if (msg.includes('Processo concluído') || msg.includes('concluído')) {
+      setTimeout(() => {
+        iniciarJoinsBtn.disabled = false;
+        iniciarJoinsBtn.innerHTML = 'Iniciar';
+        iniciarJoinsBtn.style.opacity = '1';
+      }, 1000);
+    }
+  });
 
   log('Interface carregada');
 </script>
